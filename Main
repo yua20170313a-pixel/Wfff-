@@ -1,0 +1,188 @@
+-- なんやねん
+-- こんどから難読化するわ
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
+local Lighting = game:GetService("Lighting")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+local spawnInterval = 0.06
+local growSpeed = 251
+local spiralRadius = 121
+local spiralSpeed = 151
+local lifespan = 32
+local blackHoleDelay = 7
+local blackHoleSize = 5000
+local absorptionSpeed = 90
+local auraCount = 200
+local ringCount = 100
+
+local ghostSpheres = {}
+local auraParticles = {}
+local trails = {}
+local rings = {}
+
+local function spawnGhostSphere(position)
+    local sphere = Instance.new("Part")
+    sphere.Shape = Enum.PartType.Ball
+    sphere.Anchored = true
+    sphere.CanCollide = false
+    sphere.Material = Enum.Material.Neon
+    sphere.Size = Vector3.new(1,1,1)
+    sphere.Parent = workspace
+    table.insert(ghostSpheres, sphere)
+
+    local elapsed = 0
+    local connection
+    connection = RunService.RenderStepped:Connect(function(delta)
+        elapsed = elapsed + delta
+        sphere.Size = Vector3.new(1 + elapsed*growSpeed, 1 + elapsed*growSpeed, 1 + elapsed*growSpeed)
+        sphere.Transparency = math.min(1, elapsed / lifespan)
+        local angle = elapsed * spiralSpeed
+        local offset = Vector3.new(math.cos(angle) * spiralRadius, elapsed, math.sin(angle) * spiralRadius)
+        if humanoidRootPart then sphere.Position = humanoidRootPart.Position + offset end
+        sphere.Color = Color3.fromHSV((elapsed/lifespan)%1,1,1)
+        if elapsed >= lifespan then connection:Disconnect() end
+    end)
+end
+
+local function spawnAura(position)
+    for i=1,auraCount do
+        local aura = Instance.new("Part")
+        aura.Shape = Enum.PartType.Ball
+        aura.Anchored = true
+        aura.CanCollide = false
+        aura.Material = Enum.Material.Neon
+        aura.Size = Vector3.new(1,1,1)
+        aura.Transparency = 0.5
+        aura.Color = Color3.fromHSV(i/auraCount,1,1)
+        aura.Position = position
+        aura.Parent = workspace
+        table.insert(auraParticles, aura)
+        local elapsed = 0
+        local connection
+        connection = RunService.RenderStepped:Connect(function(delta)
+            elapsed = elapsed + delta
+            aura.Size = Vector3.new(5 + elapsed*30,5 + elapsed*30,5 + elapsed*30)
+            aura.Transparency = math.min(1, elapsed/2)
+            if elapsed >= 2 then connection:Disconnect(); aura:Destroy() end
+        end)
+    end
+end
+
+local function spawnTrail(position, color)
+    local trail = Instance.new("Part")
+    trail.Anchored = true
+    trail.CanCollide = false
+    trail.Material = Enum.Material.Neon
+    trail.Size = Vector3.new(1,1,1)
+    trail.Color = color
+    trail.Transparency = 0.3
+    trail.Position = position
+    trail.Parent = workspace
+    table.insert(trails, trail)
+    local elapsed = 0
+    local connection
+    connection = RunService.RenderStepped:Connect(function(delta)
+        elapsed = elapsed + delta
+        trail.Size = Vector3.new(1 + elapsed*20,1 + elapsed*20,1 + elapsed*20)
+        trail.Transparency = math.min(1, 0.3 + elapsed/1.5)
+        if elapsed >= 1.5 then connection:Disconnect(); trail:Destroy() end
+    end)
+end
+
+local function spawnRings(position)
+    for i=1,ringCount do
+        local ring = Instance.new("Part")
+        ring.Shape = Enum.PartType.Ball
+        ring.Anchored = true
+        ring.CanCollide = false
+        ring.Material = Enum.Material.Neon
+        ring.Size = Vector3.new(2,0.5,2)
+        ring.Color = Color3.fromHSV(i/ringCount,1,1)
+        ring.Transparency = 0.3
+        ring.Position = position
+        ring.Parent = workspace
+        table.insert(rings, ring)
+        local elapsed = 0
+        local connection
+        connection = RunService.RenderStepped:Connect(function(delta)
+            elapsed = elapsed + delta
+            local scale = 5 + elapsed*50
+            ring.Size = Vector3.new(scale,0.5,scale)
+            ring.Transparency = math.min(1,0.3 + elapsed/1.5)
+            if elapsed >= 1.5 then connection:Disconnect(); ring:Destroy() end
+        end)
+    end
+end
+
+local function enableNightMode()
+    Lighting.TimeOfDay = "00:00:00"
+    Lighting.Brightness = 2
+    Lighting.Ambient = Color3.fromRGB(20, 20, 40)
+    Lighting.OutdoorAmbient = Color3.fromRGB(10,10,30)
+    Lighting.FogColor = Color3.fromRGB(0,0,0)
+    Lighting.FogStart = 0
+    Lighting.FogEnd = 1000
+end
+
+local function spawnBlackHole(position)
+    enableNightMode()
+
+    local blackHole = Instance.new("Part")
+    blackHole.Shape = Enum.PartType.Ball
+    blackHole.Anchored = true
+    blackHole.CanCollide = false
+    blackHole.Material = Enum.Material.SmoothPlastic
+    blackHole.Color = Color3.new(0,0,0)
+    blackHole.Size = Vector3.new(5,5,5)
+    blackHole.Position = position
+    blackHole.Parent = workspace
+
+    spawnAura(position)
+    spawnRings(position)
+
+    local elapsed = 0
+    local connection
+    connection = RunService.RenderStepped:Connect(function(delta)
+        elapsed = elapsed + delta
+        blackHole.Size = Vector3.new(math.min(blackHoleSize,5 + elapsed*60),
+                                     math.min(blackHoleSize,5 + elapsed*60),
+                                     math.min(blackHoleSize,5 + elapsed*60))
+
+        for _, part in pairs(workspace:GetChildren()) do
+            if part:IsA("Part") and part ~= humanoidRootPart and part ~= blackHole then
+                local direction = (blackHole.Position - part.Position)
+                if direction.Magnitude > 1 then
+                    part.Position = part.Position + direction.Unit * absorptionSpeed * delta
+                    spawnTrail(part.Position, part.Color)
+                else
+                    part:Destroy()
+                end
+            end
+        end
+
+        if elapsed >= 4 then
+            connection:Disconnect()
+            blackHole:Destroy()
+        end
+    end)
+end
+
+spawn(function()
+    while true do
+        if humanoidRootPart then
+            spawnGhostSphere(humanoidRootPart.Position)
+        end
+        wait(spawnInterval)
+    end
+end)
+
+delay(blackHoleDelay, function()
+    if humanoidRootPart then
+        spawnBlackHole(humanoidRootPart.Position)
+    end
+end)
